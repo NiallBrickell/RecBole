@@ -16,6 +16,7 @@ from recbole.config import Config
 from recbole.data import create_dataset, data_preparation, save_split_dataloaders, load_split_dataloaders
 from recbole.utils import init_logger, get_model, get_trainer, init_seed, set_color
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def run_recbole(model=None, dataset=None, config_file_list=None, config_dict=None, saved=True):
     r""" A fast running api, which includes the complete process of
@@ -46,7 +47,8 @@ def run_recbole(model=None, dataset=None, config_file_list=None, config_dict=Non
 
     # model loading and initialization
     init_seed(config['seed'], config['reproducibility'])
-    model = get_model(config['model'])(config, train_data.dataset).to(config['device'])
+    model = get_model(config['model'])(config, train_data.dataset)
+    model.to(device)
     logger.info(model)
 
     # trainer loading and initialization
@@ -86,7 +88,8 @@ def objective_function(config_dict=None, config_file_list=None, saved=True):
     dataset = create_dataset(config)
     train_data, valid_data, test_data = data_preparation(config, dataset)
     init_seed(config['seed'], config['reproducibility'])
-    model = get_model(config['model'])(config, train_data.dataset).to(config['device'])
+    model = get_model(config['model'])(config, train_data.dataset)
+    model.to(device)
     trainer = get_trainer(config['MODEL_TYPE'], config['model'])(config, model)
     best_valid_score, best_valid_result = trainer.fit(train_data, valid_data, verbose=False, saved=saved)
     test_result = trainer.evaluate(test_data, load_best_model=saved)
@@ -99,7 +102,7 @@ def objective_function(config_dict=None, config_file_list=None, saved=True):
     }
 
 
-def load_data_and_model(model_file):
+def load_data_and_model(model_file, **config_dict):
     r"""Load filtered dataset, split dataloaders and saved model.
 
     Args:
@@ -114,8 +117,10 @@ def load_data_and_model(model_file):
             - valid_data (AbstractDataLoader): The dataloader for validation.
             - test_data (AbstractDataLoader): The dataloader for testing.
     """
-    checkpoint = torch.load(model_file)
+    checkpoint = torch.load(model_file, map_location=device)
     config = checkpoint['config']
+    for k, v in config_dict.items():
+        config[k] = v
     init_seed(config['seed'], config['reproducibility'])
     init_logger(config)
     logger = getLogger()
@@ -126,7 +131,8 @@ def load_data_and_model(model_file):
     train_data, valid_data, test_data = data_preparation(config, dataset)
 
     init_seed(config['seed'], config['reproducibility'])
-    model = get_model(config['model'])(config, train_data.dataset).to(config['device'])
+    model = get_model(config['model'])(config, train_data.dataset)
+    model.to(device)
     model.load_state_dict(checkpoint['state_dict'])
     model.load_other_parameter(checkpoint.get('other_parameter'))
 
